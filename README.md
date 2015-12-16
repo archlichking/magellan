@@ -24,6 +24,7 @@ Features
       - Optional Sauce Connect tunnel management (`--create_tunnels`).
       - Create lists of browser tiers or browser testing groups with browser profiles (eg: tier1 browsers, tier2 browsers, mobile browsers, vintage IE versions, etc).
       - Manage not just browsers, but also devices for native application testing (iOS and Android)
+    - Can talk to a [locks service](https://github.com/TestArmada/locks) to control saucelabs virtual machine usage (beta).
 
 Test Framework Compatibility
 ============================
@@ -107,6 +108,38 @@ $ magellan --browser=chrome,firefox
 ```
 
 #### Controlling Which Tests Run
+
+##### Tag Support in Mocha-based Tests
+
+In Mocha-based tests, Magellan will find tags in `it()` strings in the form of a tagname preceded by an `@`. For example, to define a test that would match with `--tags=commerce` or `--tags=smoke`, we would write:
+
+```javascript
+it("should submit the purchase @commerce @smoke", function (done) {
+  ...
+});
+```
+
+##### Tag Support in Nightwatch.js-based Tests
+
+In Nightwatch-based tests, Magellan supports the standard Nightwatch convention of tags. To define a test that Magellan can match with `--tags=commerce` or `--tags=smoke`, we would write:
+
+```javascript
+module.exports = new Test({
+
+  tags: ["commerce", "smoke"],
+
+  "Load the order page": function (client) {
+    ...
+  },
+
+  "Submit the purchase": function (client) {
+    ...
+  }
+
+});
+```
+
+##### Selecting Tags at Runtime
 
 To filter by one or more tags, run `magellan` with the `--tag` or `--tags` option:
 ```console
@@ -289,6 +322,57 @@ Some custom reporters need to initialize themselves asynchronously before `liste
 
 In the above example, a reporter needs to create a job entry and obtain the id of the job before it can send information about running tests. Magellan will wait until `initialize()` resolves this promise before starting any tests.
 
+Setup and Teardown
+==================
+
+If you need to run setup and teardown tasks before and after your test suite runs, respectively, it's recommended to write npm tasks for that purpose and simply sandwich your `magellan` call between them.
+
+Sometimes, however, you need a setup and teardown process that constructs state **within Node** and then cleans up afterwards. For this use case, Magellan also supports a global setup and teardown hook that will run before and after your suite. To register a setup and teardown, add a path to your `magellan.json`:
+
+```json
+{
+  "setup_teardown": "path/to/setup_teardown.js",
+}
+```
+
+Magellan will `require()` these modules and run them as functions that should call a callback. Setup and teardown modules should look like this:
+
+```javascript
+var Q = require("q");
+
+var SetupTeardown = function () {
+};
+
+SetupTeardown.prototype = {
+  initialize: function () {
+    var deferred = Q.defer();
+
+    // do asynchronous setup stuff here. Resolve (or reject) promise when ready.
+    doAsyncStuff(function (){
+      deferred.resolve();
+    });
+
+    return deferred.promise;
+  },
+
+  flush: function () {
+    var deferred = Q.defer();
+
+    // do asynchronous teardown stuff here. Resolve (or reject) promise when ready.
+    doAsyncStuff(function (){
+      deferred.resolve();
+    });
+
+    return deferred.promise;
+
+  }
+};
+
+module.exports = SetupTeardown;
+```
+
+Note: Magellan should ensure that `flush()` always runs even if your test suite fails.
+
 SauceLabs Support
 =================
 
@@ -346,6 +430,20 @@ $ magellan --sauce --browser=chrome_42_Windows_2012_R2_Desktop --create_tunnels 
 ```
 
 In the above example, 4 tunnels will be distributed amongst 16 workers.
+
+SauceLabs VM Traffic Control (`locks`)
+======================================
+
+To specify a `locks` server, set the environment variable `LOCKS_SERVER`:
+
+```
+export LOCKS_SERVER=http://locks.server.example:4765/
+```
+
+or use the `--locks_server` option:
+```
+$ magellan --locks_server=http://locks.server.example:4765 --sauce --browser=chrome_42_Windows_2012_R2_Desktop --create_tunnels --max_tunnels=4 --max_workers=16
+```
 
 Display Resolution and Orientation Support (SauceLabs Browsers)
 ===============================================================

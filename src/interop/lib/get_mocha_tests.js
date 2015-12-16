@@ -8,10 +8,9 @@ var mochaSettings = require("./mocha_settings");
 
 var sourceFolders = mochaSettings.mochaTestFolders;
 
-var Path = function (path, filename, id) {
+var Path = function (path, filename) {
   this.path = path;
   this.filename = filename;
-  this.id = id;
 };
 
 Path.prototype.toString = function () {
@@ -47,18 +46,16 @@ module.exports = function () {
   // Scan each file for calls to it("....");
   var tests = allFiles.map(function (filename) {
     filename = path.resolve(filename);
-    var root = acorn.parse(fs.readFileSync(path.resolve(filename)));
+    var root = acorn.parse(fs.readFileSync(path.resolve(filename)), {
+      ecmaVersion: 6
+    });
     var children = [];
 
     // walk all nodes in JS syntax tree, hunt for CallExpressions of the form it("..");
     walk.findNodeAt(root, null, null, function (nodeType, node) {
       if (nodeType === "CallExpression" && node.callee.name === "it") {
         var name = node.arguments[0].value;
-        var id = "-----";
-        if (name.indexOf("[C") > -1 && name.indexOf("]") > -1) {
-          id = name.split("[")[1].split("]")[0];
-        }
-        children.push(new Path(name, filename, id));
+        children.push(new Path(name, filename));
       }
     });
     return children;
